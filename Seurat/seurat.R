@@ -4,6 +4,7 @@ library(patchwork)
 library(stringr)
 library(Matrix)
 
+#The chosen tissue is the heart
 raw.data <- read.csv('FACS/Heart-counts.csv',row.names=1)
 meta.data <- read.csv('metadata_FACS.csv')
 
@@ -13,28 +14,20 @@ rownames(meta.data) <- meta.data$plate.barcode
 cell.meta.data <- meta.data[plates,]
 rownames(cell.meta.data) <- colnames(raw.data)
 
-#exclude External RNA Control Consortium
+# Find ERCC's and drop them from the raw data
 erccs <- grep(pattern = "^ERCC-", x = rownames(x = raw.data), value = TRUE)
-percent.ercc <- Matrix::colSums(raw.data[erccs, ])/Matrix::colSums(raw.data)
 ercc.index <- grep(pattern = "^ERCC-", x = rownames(x = raw.data), value = FALSE)
 raw.data <- raw.data[-ercc.index,]
 
+# Create the Seurat object with all the data
 tiss <- CreateSeuratObject(counts = raw.data, min.cells = 5, min.genes = 5)
 
 tiss <- AddMetaData(object = tiss, cell.meta.data)
-tiss <- AddMetaData(object = tiss, percent.ercc, col.name = "percent.ercc")
 
-ribo.genes <- grep(pattern = "^Rp[sl][[:digit:]]", x = rownames(x = tiss), value = TRUE)
-percent.ribo <- Matrix::colSums(tiss[ribo.genes, ])/Matrix::colSums(tiss)
-tiss <- AddMetaData(object = tiss, metadata = percent.ribo, col.name = "percent.ribo")
+# # Find and compute the percent of mitochondrial genes
+tiss[["percent.mt"]] <- PercentageFeatureSet(tiss, pattern = "^MT-")
 
-#45S pre-ribosomal RNA
-percent.Rn45s <- Matrix::colSums(tiss[c('Rn45s'), ])/Matrix::colSums(tiss)
-tiss <- AddMetaData(object = tiss, metadata = percent.Rn45s, col.name = "percent.Rn45s")
-
-FeatureScatter(tiss, "nCount_RNA", "nFeature_RNA")
-
-VlnPlot(tiss, features = c("nFeature_RNA", "nCount_RNA"), ncol = 2)
+VlnPlot(tiss, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3) # Mito genes were not found for some reason
 
 #Filter out cells with few reads and few genes
 
